@@ -1,0 +1,18 @@
+{
+  "components": {
+    "yt_dlp": {
+      "enabled": true,
+      "repository": "yt-dlp/yt-dlp",
+      "download_url": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+    },
+    "deno": {
+      "enabled": true,
+      "repository": "denoland/deno",
+      "download_url": "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
+    },
+    "ffmpeg": {
+      "enabled": true,
+      "source": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+    }
+  }
+}
