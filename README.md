@@ -1,58 +1,41 @@
-# YTPL Downloader
+# YTPL Downloader - Ultimate Pro Edition 🚀
 
-YTPL Downloader is a Windows x64 desktop application for downloading authorized YouTube videos and playlists, extracting media URLs, selecting playlist ranges, and creating TV-friendly MP4 files.
+![YTPL Downloader](https://img.shields.io/badge/Version-4.0-brightgreen)
+![Platform](https://img.shields.io/badge/Platform-Windows-blue)
+![Language](https://img.shields.io/badge/Language-PowerShell-blueviolet)
 
-## Project
+YTPL Downloader is a powerful, IDM-style, professional YouTube and Playlist downloading application built completely in PowerShell and WPF (XAML). It utilizes the powerful `yt-dlp` and `FFmpeg` engines under the hood.
 
-- Application name: YTPL Downloader
-- Executable: `ytpl-downloader.exe`
-- Target: Windows x64
-- Repository: https://github.com/aumys/ytpl-downloader
+## 🌟 Key Features
 
-## Features
+- **IDM-Style UI:** Clean, dark-themed UI with pop-up progress dialogs and completion actions.
+- **Smart Clipboard Monitor:** Automatically detects and grabs media links from your clipboard.
+- **Pause & Resume:** Full support for pausing and resuming active downloads.
+- **Advanced Quality Presets:** Download in TV MP4 (H.264+AAC), 1080p, 720p, MKV, WebM, and MP3.
+- **Playlist Management:** Download full playlists or specific ranges (e.g., videos 185 to 245).
+- **Pro Metadata & Auth:**
+  - Embed English/Urdu Subtitles automatically.
+  - Download video thumbnails (JPG).
+  - Use Browser Cookies (Chrome, Edge, Firefox) for age-restricted or private videos.
+  - Custom file naming formats (Date, Channel Name, Title).
+- **Automated Post-Actions:** Turn off your PC automatically after downloads finish.
+- **Thread Optimization:** Up to 16 concurrent fragments for maximum download speed.
 
-- Single video downloading.
-- Playlist downloading.
-- Playlist Start and End range selection.
-- Link extraction and export.
-- Download progress, ETA, current item, log, and Stop controls.
-- Save-folder selection.
-- TV-friendly MP4 presets using H.264 video and AAC audio.
-- MP4, MKV, WebM, and MP3 presets.
-- Automatic detection and reuse of existing dependencies.
-- Automatic dependency update checks.
-- Application update notification through a GitHub-hosted manifest.
+## ⚙️ Installation & Usage
 
-## Dependencies
+1. Download the `YTPL-Downloader.exe` from the Releases tab (or compile it yourself using `ps2exe`).
+2. Place the executable in any folder. 
+3. *Note: Ensure `yt-dlp.exe` and `ffmpeg.exe` are in the same folder, or let the smart auto-setup handle dependencies if configured.*
+4. Open the app, paste a URL, select your desired quality, and hit **Start Download**.
 
-- yt-dlp
-- Deno
-- FFmpeg
-- ffprobe
+## 🛠️ Compilation (For Developers)
 
-The application checks for existing components before downloading them. Missing or outdated components are downloaded from their configured sources.
+To compile the raw PowerShell script into a Windows executable without a console window, run:
 
-## Update System
+```powershell
+Invoke-ps2exe -inputFile "ytpl-app.ps1" -outputFile "YTPL-Downloader.exe" -noConsole
+```
 
-The application version is managed independently from dependency versions. When a newer application version is published, the application can notify the user and open the official GitHub Releases page.
+## 📜 License
 
-Configuration files:
-
-- `update.json` - application update metadata.
-- `config/components.json` - dependency configuration.
-- `PROJECT_CONTEXT.md` - persistent project context for future development.
-- `CHANGELOG.md` - project change history.
-
-## Release
-
-Application binaries should be published through GitHub Releases. The recommended release asset name is `ytpl-downloader.exe`.
-
-## Development Rules
-
-Source code must be English-only. Do not place Urdu text inside source code, configuration, or code comments.
-
-Do not store credentials, tokens, passwords, or private keys in this repository.
-
-## Legal
-
-Use the application only for content you are authorized to download and in accordance with applicable laws and platform terms.
+This project is created for educational and personal use.
