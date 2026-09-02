@@ -1,18 +1,27 @@
 {
+  "schema_version": 1,
   "components": {
     "yt_dlp": {
       "enabled": true,
+      "provider": "github",
       "repository": "yt-dlp/yt-dlp",
-      "download_url": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+      "windows_asset": "yt-dlp.exe",
+      "download_url": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe",
+      "update_policy": "check_and_update"
     },
     "deno": {
       "enabled": true,
+      "provider": "github",
       "repository": "denoland/deno",
-      "download_url": "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
+      "windows_asset": "deno-x86_64-pc-windows-msvc.zip",
+      "download_url": "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip",
+      "update_policy": "check_and_update"
     },
     "ffmpeg": {
       "enabled": true,
-      "source": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+      "provider": "gyan",
+      "source": "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+      "update_policy": "check_and_update"
     }
   }
 }
