@@ -1,0 +1,8 @@
+{
+  "app_name": "YTPL Downloader",
+  "version": "1.0.0",
+  "release_url": "https://github.com/aumys/ytpl-downloader/releases/latest",
+  "download_page": "https://github.com/aumys/ytpl-downloader/releases/latest",
+  "release_asset": "ytpl-downloader.exe",
+  "update_policy": "notify_and_open_release_page"
+}
