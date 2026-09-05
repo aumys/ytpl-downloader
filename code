@@ -1,537 +1,737 @@
 # ==========================================
-# YTPL Downloader - Ultimate Pro Edition v4.0
-# Features: Subtitles, Cookies, Thumbnails, Auto-Grabber
+# AUMYS YTPL Downloader - ULTIMATE v11.5
+# Rebranded: Official AUMYS Enterprise Build
+# Features: Complete Menu Integration, Dynamic Queue Management, Multi-threaded Engine, Rock-solid Stability
 # ==========================================
 
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+# 1. C# Class for Real-Time UI Updating (DataBinding)
+$code = @"
+using System;
+using System.ComponentModel;
+using System.Diagnostics;
+
+public class DownloadTask : INotifyPropertyChanged {
+    public event PropertyChangedEventHandler PropertyChanged;
+    private void Notify(string prop) { if (PropertyChanged != null) { PropertyChanged(this, new PropertyChangedEventArgs(prop)); } }
+
+    private string _fileName; public string FileName { get{return _fileName;} set{_fileName=value; Notify("FileName");} }
+    private string _status; public string Status { get{return _status;} set{_status=value; Notify("Status");} }
+    private string _size; public string Size { get{return _size;} set{_size=value; Notify("Size");} }
+    private string _downloaded; public string Downloaded { get{return _downloaded;} set{_downloaded=value; Notify("Downloaded");} }
+    private string _progressText; public string ProgressText { get{return _progressText;} set{_progressText=value; Notify("ProgressText");} }
+    private double _progress; public double Progress { get{return _progress;} set{_progress=value; Notify("Progress");} }
+    private string _transferRate; public string TransferRate { get{return _transferRate;} set{_transferRate=value; Notify("TransferRate");} }
+    private string _timeLeft; public string TimeLeft { get{return _timeLeft;} set{_timeLeft=value; Notify("TimeLeft");} }
+    private bool _openOnComplete; public bool OpenOnComplete { get{return _openOnComplete;} set{_openOnComplete=value; Notify("OpenOnComplete");} }
+
+    public string Id { get; set; }
+    public string Url { get; set; }
+    public string Engine { get; set; }
+    public string LogFile { get; set; }
+    public string SavePath { get; set; }
+    public Process Process { get; set; }
+    public ProcessStartInfo StartInfo { get; set; }
+    public int LastReadIndex { get; set; }
+}
+"@
+Add-Type -TypeDefinition $code -Language CSharp
+
+# 2. Main Window XAML
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        Title="YTPL Downloader - Ultimate Pro Edition" Height="820" Width="680"
-        Background="#FF1E1E1E" Foreground="White" WindowStartupLocation="CenterScreen">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AUMYS YTPL Downloader PRO" Height="768" Width="1024" MinHeight="600" MinWidth="800"
+        Background="#FFF0F0F0" WindowStartupLocation="CenterScreen" FontFamily="Segoe UI">
     
     <Window.Resources>
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="#FF007ACC"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="Padding" Value="10,5"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Margin" Value="5,0"/>
+        <Style TargetType="Button" x:Key="ToolbarBtn">
+            <Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Margin" Value="2,0"/><Setter Property="Padding" Value="5"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3" BorderThickness="1" BorderBrush="Transparent" Name="border">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="border" Property="Background" Value="#FFE5F3FF"/><Setter TargetName="border" Property="BorderBrush" Value="#FFD2E8F8"/></Trigger>
+                            <Trigger Property="IsPressed" Value="True"><Setter TargetName="border" Property="Background" Value="#FFCCE4F7"/><Setter TargetName="border" Property="BorderBrush" Value="#FF0078D7"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#FFF0F0F0"/><Setter Property="Padding" Value="5,4"/><Setter Property="BorderBrush" Value="#FFCCCCCC"/><Setter Property="BorderThickness" Value="0,0,1,1"/><Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Padding" Value="5,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Padding="{TemplateBinding Padding}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}">
+                            <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FF0098FF"/>
-                </Trigger>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#FF555555"/>
-                    <Setter Property="Foreground" Value="#FFAAAAAA"/>
-                </Trigger>
+                <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="#FFCCE8FF"/><Setter Property="Foreground" Value="Black"/></Trigger>
             </Style.Triggers>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="15">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <DockPanel>
+        <!-- Fully Operational Top Menus -->
+        <Menu DockPanel.Dock="Top" Background="White" BorderBrush="#FFCCCCCC" BorderThickness="0,0,0,1" Padding="0,2">
+            <MenuItem Header="Tasks">
+                <MenuItem Header="Add new download..." Name="MenuAddUrl"/>
+                <Separator/>
+                <MenuItem Header="Resume download" Name="MenuResume"/>
+                <MenuItem Header="Stop download" Name="MenuStop"/>
+                <Separator/>
+                <MenuItem Header="Delete download" Name="MenuDelete"/>
+                <Separator/>
+                <MenuItem Header="Exit" Name="MenuExit"/>
+            </MenuItem>
+            <MenuItem Header="Downloads">
+                <MenuItem Header="Pause all" Name="MenuPauseAll"/>
+                <MenuItem Header="Delete all completed" Name="MenuDeleteCompleted"/>
+            </MenuItem>
+            <MenuItem Header="Options" Name="MenuOptionsBtn"/>
+        </Menu>
 
-        <TextBlock Grid.Row="0" Text="YTPL Downloader PRO" FontSize="26" FontWeight="Bold" Foreground="#FF569CD6" Margin="0,0,0,15"/>
+        <ToolBarTray DockPanel.Dock="Top" Background="#FFF0F0F0">
+            <ToolBar Background="Transparent" BorderThickness="0" Padding="5">
+                <Button Name="AddUrlBtn" Style="{StaticResource ToolbarBtn}">
+                    <StackPanel><TextBlock Text="➕" FontSize="24" HorizontalAlignment="Center" Foreground="#FF28A745"/><TextBlock Text="Add URL" FontSize="11" HorizontalAlignment="Center"/></StackPanel>
+                </Button>
+                <Button Name="ResumeBtn" Style="{StaticResource ToolbarBtn}">
+                    <StackPanel><TextBlock Text="▶" FontSize="24" HorizontalAlignment="Center" Foreground="#FF007ACC"/><TextBlock Text="Resume" FontSize="11" HorizontalAlignment="Center"/></StackPanel>
+                </Button>
+                <Button Name="StopBtn" Style="{StaticResource ToolbarBtn}">
+                    <StackPanel><TextBlock Text="⏹" FontSize="24" HorizontalAlignment="Center" Foreground="#FFD13438"/><TextBlock Text="Stop" FontSize="11" HorizontalAlignment="Center"/></StackPanel>
+                </Button>
+                <Separator Margin="5,0"/>
+                <Button Name="DeleteBtn" Style="{StaticResource ToolbarBtn}">
+                    <StackPanel><TextBlock Text="🗑" FontSize="24" HorizontalAlignment="Center" Foreground="#FF666666"/><TextBlock Text="Delete" FontSize="11" HorizontalAlignment="Center"/></StackPanel>
+                </Button>
+                <Separator Margin="5,0"/>
+                <Button Name="OptionsBtn" Style="{StaticResource ToolbarBtn}">
+                    <StackPanel><TextBlock Text="⚙" FontSize="24" HorizontalAlignment="Center" Foreground="#FF007ACC"/><TextBlock Text="Options" FontSize="11" HorizontalAlignment="Center"/></StackPanel>
+                </Button>
+                <Separator Margin="5,0"/>
+                <Button Name="LogsBtn" Style="{StaticResource ToolbarBtn}">
+                    <StackPanel><TextBlock Text="📝" FontSize="24" HorizontalAlignment="Center" Foreground="#FF10b981"/><TextBlock Text="Logs" FontSize="11" HorizontalAlignment="Center"/></StackPanel>
+                </Button>
+            </ToolBar>
+        </ToolBarTray>
 
-        <StackPanel Grid.Row="1" Margin="0,0,0,15">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="Media URLs (Queue supported):" Margin="0,0,0,5"/>
-                <CheckBox Name="ClipMonitorCheck" Grid.Column="1" Content="Auto-grab links from Clipboard" IsChecked="True" Foreground="#FFF2C811" FontWeight="SemiBold" Margin="0,0,0,5"/>
-            </Grid>
-            <TextBox Name="UrlInput" Height="70" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" Padding="5" Background="#FF2D2D30" Foreground="White" BorderBrush="#FF3F3F46"/>
-            
-            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                <TextBlock Text="Playlist Start:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                <TextBox Name="PlaylistStart" Width="40" Text="1" Background="#FF2D2D30" Foreground="White" TextAlignment="Center"/>
-                <TextBlock Text="End (0 for all):" VerticalAlignment="Center" Margin="15,0,5,0"/>
-                <TextBox Name="PlaylistEnd" Width="40" Text="0" Background="#FF2D2D30" Foreground="White" TextAlignment="Center"/>
-            </StackPanel>
-        </StackPanel>
+        <StatusBar DockPanel.Dock="Bottom" Background="#FFF0F0F0" BorderBrush="#FFCCCCCC" BorderThickness="0,1,0,0">
+            <StatusBarItem><TextBlock Name="StatusBarText" Text="AUMYS YTPL Engine Ready."/></StatusBarItem>
+        </StatusBar>
 
-        <GroupBox Grid.Row="2" Header="Output &amp; Save Settings" Foreground="White" BorderBrush="#FF3F3F46" Margin="0,0,0,10" Padding="10">
-            <StackPanel>
-                <TextBlock Text="Video Quality / Preset:" Margin="0,0,0,5"/>
-                <ComboBox Name="PresetSelector" Height="25" Margin="0,0,0,10">
-                    <ComboBoxItem Content="TV MP4 1080p (H.264 + AAC)" IsSelected="True"/>
-                    <ComboBoxItem Content="TV MP4 720p (H.264 + AAC)"/>
-                    <ComboBoxItem Content="TV MP4 480p (H.264 + AAC)"/>
-                    <ComboBoxItem Content="MP4 1080p (Best)"/>
-                    <ComboBoxItem Content="MP4 720p (Best)"/>
-                    <ComboBoxItem Content="MP4 480p (Best)"/>
-                    <ComboBoxItem Content="MKV (Best)"/>
-                    <ComboBoxItem Content="WebM (Best)"/>
-                    <ComboBoxItem Content="MP3 Audio"/>
-                </ComboBox>
+        <Grid Background="White">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="200" MinWidth="150"/><ColumnDefinition Width="5"/><ColumnDefinition Width="*" MinWidth="300"/></Grid.ColumnDefinitions>
 
-                <TextBlock Text="Save Directory:" Margin="0,0,0,5"/>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox Name="SaveFolderInput" Grid.Column="0" Height="25" Padding="5" Background="#FF2D2D30" Foreground="White" BorderBrush="#FF3F3F46" IsReadOnly="True"/>
-                    <Button Name="BrowseBtn" Grid.Column="1" Content="Browse..." Width="70" Margin="10,0,0,0"/>
-                    <Button Name="OpenFolderBtn" Grid.Column="2" Content="Open Folder" Width="90" Background="#FF4F4F4F" Margin="10,0,0,0"/>
-                </Grid>
-            </StackPanel>
-        </GroupBox>
+            <TreeView Name="CategoryTree" Grid.Column="0" BorderThickness="0" Padding="5">
+                <TreeViewItem Header="Categories" IsExpanded="True" FontWeight="Bold">
+                    <TreeViewItem Header="All Downloads" IsExpanded="True" FontWeight="Normal" IsSelected="True">
+                        <TreeViewItem Header="Media (yt-dlp)"/>
+                        <TreeViewItem Header="Direct Files (aria2)"/>
+                    </TreeViewItem>
+                    <TreeViewItem Header="Unfinished" FontWeight="Normal"/>
+                    <TreeViewItem Header="Finished" FontWeight="Normal"/>
+                </TreeViewItem>
+            </TreeView>
 
-        <!-- NEW: Pro Features (Subtitles, Cookies, Formatting) -->
-        <GroupBox Grid.Row="3" Header="Pro Features (Metadata &amp; Auth)" Foreground="White" BorderBrush="#FF3F3F46" Margin="0,0,0,10" Padding="10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#FFF0F0F0"/>
 
-                <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                    <CheckBox Name="SubtitlesCheck" Content="Download &amp; Embed Subtitles (En/Ur)" Foreground="White" Margin="0,0,0,8"/>
-                    <CheckBox Name="ThumbnailCheck" Content="Download Video Thumbnail (JPG)" Foreground="White" Margin="0,0,0,8"/>
-                    
-                    <TextBlock Text="Browser Cookies (For Private/18+ Vids):" Margin="0,0,0,2"/>
-                    <ComboBox Name="CookiesSelector" Height="25" Margin="0,0,0,8">
-                        <ComboBoxItem Content="None (Default)" IsSelected="True"/>
-                        <ComboBoxItem Content="Chrome"/>
-                        <ComboBoxItem Content="Edge"/>
-                        <ComboBoxItem Content="Firefox"/>
-                        <ComboBoxItem Content="Brave"/>
-                    </ComboBox>
-                </StackPanel>
+            <DataGrid Name="MainList" Grid.Column="2" AutoGenerateColumns="False" IsReadOnly="True"
+                      HeadersVisibility="Column" Background="White" RowBackground="White" AlternatingRowBackground="#FFF9F9F9"
+                      GridLinesVisibility="All" VerticalGridLinesBrush="#FFD3D3D3" HorizontalGridLinesBrush="#FFD3D3D3"
+                      BorderThickness="1,0,0,0" BorderBrush="#FFCCCCCC" SelectionMode="Single" SelectionUnit="FullRow"
+                      CanUserAddRows="False" CanUserDeleteRows="False" CanUserReorderColumns="True">
+                
+                <DataGrid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="▶ Resume Download" Name="CtxResumeBtn"/>
+                        <MenuItem Header="⏹ Stop Download" Name="CtxStopBtn"/>
+                        <Separator/>
+                        <MenuItem Header="📂 Open Folder" Name="CtxOpenFolderBtn"/>
+                        <MenuItem Header="ℹ Show Status Info" Name="CtxStatusBtn"/>
+                        <Separator/>
+                        <MenuItem Header="🗑 Remove from List" Name="CtxDeleteBtn"/>
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
 
-                <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                    <TextBlock Text="File Naming Format:" Margin="0,0,0,2"/>
-                    <ComboBox Name="NamingSelector" Height="25" Margin="0,0,0,8">
-                        <ComboBoxItem Content="Video Title (Default)" IsSelected="True"/>
-                        <ComboBoxItem Content="Channel Name - Video Title"/>
-                        <ComboBoxItem Content="Upload Date - Video Title"/>
-                    </ComboBox>
-                </StackPanel>
-            </Grid>
-        </GroupBox>
-
-        <GroupBox Grid.Row="4" Header="Connection &amp; Automation" Foreground="White" BorderBrush="#FF3F3F46" Margin="0,0,0,10" Padding="10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0" Margin="0,0,10,0">
-                    <TextBlock Text="Max Connections (Threads):" Margin="0,0,0,2"/>
-                    <ComboBox Name="ThreadsSelector" Height="25" Margin="0,0,0,8">
-                        <ComboBoxItem Content="1 (Single Connection)"/>
-                        <ComboBoxItem Content="16 Threads (IDM Default)" IsSelected="True"/>
-                    </ComboBox>
-                    
-                    <TextBlock Text="Speed Limit:" Margin="0,0,0,2"/>
-                    <ComboBox Name="SpeedLimitSelector" Height="25" Margin="0,0,0,8">
-                        <ComboBoxItem Content="Unlimited" IsSelected="True"/>
-                        <ComboBoxItem Content="1M"/>
-                        <ComboBoxItem Content="5M"/>
-                        <ComboBoxItem Content="10M"/>
-                    </ComboBox>
-                </StackPanel>
-
-                <StackPanel Grid.Column="1" Margin="10,0,0,0">
-                    <TextBlock Text="Action on Completion:" Margin="0,0,0,2"/>
-                    <ComboBox Name="PostActionSelector" Height="25" Margin="0,0,0,8">
-                        <ComboBoxItem Content="Show Dialog (Default)" IsSelected="True"/>
-                        <ComboBoxItem Content="Exit Application"/>
-                        <ComboBoxItem Content="Shutdown PC"/>
-                    </ComboBox>
-                </StackPanel>
-            </Grid>
-        </GroupBox>
-
-        <TextBox Name="LogBox" Grid.Row="5" IsReadOnly="True" VerticalScrollBarVisibility="Auto" Background="#FF121212" Foreground="#FF9CDCFE" FontFamily="Consolas" Padding="5"/>
-        <TextBlock Name="StatusLabel" Grid.Row="6" Text="Status: Ready." FontSize="14" FontWeight="Bold" Foreground="#FF808080" Margin="0,10,0,0"/>
-
-        <StackPanel Grid.Row="7" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-            <Button Name="DownloadBtn" Content="Start Download" Width="140" Background="#FF28A745" Height="35" FontSize="14"/>
-        </StackPanel>
-    </Grid>
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="File Name" Width="280" Binding="{Binding FileName}"/>
+                    <DataGridTextColumn Header="Size" Width="80" Binding="{Binding Size}"/>
+                    <DataGridTextColumn Header="Status" Width="90" Binding="{Binding Status}" FontWeight="SemiBold"/>
+                    <DataGridTemplateColumn Header="Progress" Width="120">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Grid Margin="2">
+                                    <ProgressBar Minimum="0" Maximum="100" Value="{Binding Progress}" Height="14" Width="110"/>
+                                    <TextBlock Text="{Binding ProgressText}" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="10" Foreground="Black"/>
+                                </Grid>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Transfer rate" Width="90" Binding="{Binding TransferRate}"/>
+                    <DataGridTextColumn Header="Time left" Width="80" Binding="{Binding TimeLeft}"/>
+                    <DataGridTextColumn Header="Engine" Width="60" Binding="{Binding Engine}"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Grid>
+    </DockPanel>
 </Window>
 "@
-
 $reader = (New-Object System.Xml.XmlNodeReader $xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
 
-# ---------------------------------------------------------
-# Variables & Globals
-# ---------------------------------------------------------
-$BrowseBtn = $window.FindName("BrowseBtn")
-$OpenFolderBtn = $window.FindName("OpenFolderBtn")
-$ClipMonitorCheck = $window.FindName("ClipMonitorCheck")
-$SubtitlesCheck = $window.FindName("SubtitlesCheck")
-$ThumbnailCheck = $window.FindName("ThumbnailCheck")
-$CookiesSelector = $window.FindName("CookiesSelector")
-$NamingSelector = $window.FindName("NamingSelector")
-$SaveFolderInput = $window.FindName("SaveFolderInput")
-$DownloadBtn = $window.FindName("DownloadBtn")
-$UrlInput = $window.FindName("UrlInput")
-$LogBox = $window.FindName("LogBox")
-$StatusLabel = $window.FindName("StatusLabel")
-$PresetSelector = $window.FindName("PresetSelector")
-$SpeedLimitSelector = $window.FindName("SpeedLimitSelector")
-$ThreadsSelector = $window.FindName("ThreadsSelector")
-$PostActionSelector = $window.FindName("PostActionSelector")
-
-$SaveFolderInput.Text = [Environment]::GetFolderPath("Desktop")
-
-$global:activeProcess = $null
-$global:lastProcessInfo = $null
-$global:tempLogFile = "$env:TEMP\ytpl_download_log.txt"
-$global:lastLogLineCount = 0
-$global:currentFilePath = ""
-$global:progressWindow = $null
-$global:isPaused = $false
-
-function Update-UI { $window.Dispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Background) }
+[System.Windows.Threading.Dispatcher]::CurrentDispatcher.add_UnhandledException({ param($sender, $e) $e.Handled = $true })
 
 # ---------------------------------------------------------
-# UI Timer (Clipboard, Logs, Process Exit)
+# Globals & Config
+# ---------------------------------------------------------
+$global:tasks = New-Object System.Collections.ObjectModel.ObservableCollection[DownloadTask]
+$window.FindName("MainList").ItemsSource = $global:tasks
+$global:logReaders = @()
+$global:defaultSavePath = [Environment]::GetFolderPath("Desktop")
+$global:defaultPreset = "TV MP4 1080p (H.264)"
+$global:defaultThreads = "16"
+$global:defaultConcurrent = "3"
+$global:defaultSpeedLimit = "Unlimited"
+$global:currentCategory = "All Downloads"
+$global:logsWindow = $null
+
+# Category View Filtering
+$view = [System.Windows.Data.CollectionViewSource]::GetDefaultView($global:tasks)
+$view.Filter = [System.Predicate[System.Object]] {
+    param($item)
+    if ($global:currentCategory -eq "Finished") { return $item.Status -eq "Finished" }
+    if ($global:currentCategory -eq "Unfinished") { return $item.Status -ne "Finished" }
+    if ($global:currentCategory -eq "Media (yt-dlp)") { return $item.Engine -eq "yt-dlp" }
+    if ($global:currentCategory -eq "Direct Files (aria2)") { return $item.Engine -eq "aria2c" }
+    return $true 
+}
+
+$window.FindName("CategoryTree").Add_SelectedItemChanged({
+    $sel = $window.FindName("CategoryTree").SelectedItem
+    if ($sel -ne $null) { $global:currentCategory = $sel.Header.ToString(); $view.Refresh() }
+})
+
+# Helper to read logs asynchronously
+function Start-LogReader {
+    param($Process, $LogFile)
+    if ($null -eq $Process) { return }
+    $runspaceCode = {
+        param($proc, $log)
+        if ($proc -eq $null) { return }
+        try { while (-not $proc.HasExited) { $l = $proc.StandardOutput.ReadLine(); if ($l) { Add-Content $log $l } } } catch {}
+    }
+    $ps = [PowerShell]::Create().AddScript($runspaceCode).AddArgument($Process).AddArgument($LogFile)
+    $global:logReaders += @{ PS = $ps; Handle = $ps.BeginInvoke() }
+}
+
+# ---------------------------------------------------------
+# Options Dialog
+# ---------------------------------------------------------
+function Show-OptionsDialog {
+    [xml]$optXaml = @"
+    <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+            Title="AUMYS YTPL Options" Height="380" Width="420" Background="#FFF0F0F0" WindowStartupLocation="CenterOwner" ResizeMode="CanMinimize" FontFamily="Segoe UI">
+        <Grid Margin="15">
+            <StackPanel>
+                <TextBlock Text="Default Save Directory:" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                <TextBox Name="OptDir" Height="25" Margin="0,0,0,15" Padding="2"/>
+                
+                <TextBlock Text="Default Media Quality:" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                <ComboBox Name="OptPreset" Height="25" Margin="0,0,0,15">
+                    <ComboBoxItem Content="TV MP4 1080p (H.264)"/>
+                    <ComboBoxItem Content="MP4 1080p (Best)"/>
+                    <ComboBoxItem Content="MKV (Best)"/>
+                    <ComboBoxItem Content="MP3 Audio"/>
+                </ComboBox>
+                
+                <Grid Margin="0,0,0,15">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                        <TextBlock Text="Connections (aria2):" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                        <ComboBox Name="OptThreads" Height="25">
+                            <ComboBoxItem Content="16"/>
+                            <ComboBoxItem Content="32"/>
+                        </ComboBox>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                        <TextBlock Text="Max Concurrent DLs:" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                        <ComboBox Name="OptConcurrent" Height="25">
+                            <ComboBoxItem Content="1"/>
+                            <ComboBoxItem Content="3"/>
+                            <ComboBoxItem Content="5"/>
+                            <ComboBoxItem Content="10"/>
+                        </ComboBox>
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Text="Global Speed Limit:" Margin="0,0,0,5" FontWeight="SemiBold"/>
+                <ComboBox Name="OptSpeedLimit" Height="25" Margin="0,0,0,20">
+                    <ComboBoxItem Content="Unlimited"/>
+                    <ComboBoxItem Content="512K"/>
+                    <ComboBoxItem Content="1M"/>
+                    <ComboBoxItem Content="2M"/>
+                    <ComboBoxItem Content="5M"/>
+                </ComboBox>
+
+                <Button Name="SaveOptionsBtn" Content="Save Options" Width="100" Height="30" HorizontalAlignment="Right" Background="#FF007ACC" Foreground="White"/>
+            </StackPanel>
+        </Grid>
+    </Window>
+"@
+    $optWin = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $optXaml))
+    $optWin.Owner = $window
+    $optWin.FindName("OptDir").Text = $global:defaultSavePath
+    $optWin.FindName("OptPreset").Text = $global:defaultPreset
+    $optWin.FindName("OptThreads").Text = $global:defaultThreads
+    $optWin.FindName("OptConcurrent").Text = $global:defaultConcurrent
+    $optWin.FindName("OptSpeedLimit").Text = $global:defaultSpeedLimit
+
+    $optWin.FindName("SaveOptionsBtn").Add_Click({
+        $global:defaultSavePath = $optWin.FindName("OptDir").Text
+        $global:defaultPreset = $optWin.FindName("OptPreset").Text
+        $global:defaultThreads = $optWin.FindName("OptThreads").Text
+        $global:defaultConcurrent = $optWin.FindName("OptConcurrent").Text
+        $global:defaultSpeedLimit = $optWin.FindName("OptSpeedLimit").Text
+        $window.FindName("StatusBarText").Text = "AUMYS Options Saved."
+        $optWin.Close()
+    })
+    $optWin.ShowDialog() | Out-Null
+}
+
+$window.FindName("OptionsBtn").Add_Click({ Show-OptionsDialog })
+$window.FindName("MenuOptionsBtn").Add_Click({ Show-OptionsDialog })
+
+# ---------------------------------------------------------
+# UI Timer - Queue Manager & Parser
 # ---------------------------------------------------------
 $uiTimer = New-Object System.Windows.Threading.DispatcherTimer
 $uiTimer.Interval = [TimeSpan]::FromMilliseconds(500)
 $uiTimer.Add_Tick({
-    if ($ClipMonitorCheck.IsChecked -and $global:activeProcess -eq $null) {
-        try {
-            if ([System.Windows.Forms.Clipboard]::ContainsText()) {
-                $clipText = [System.Windows.Forms.Clipboard]::GetText().Trim()
-                if ($clipText -match "^https?://(www\.)?(youtube\.com|youtu\.be)" -and $UrlInput.Text -notmatch [regex]::Escape($clipText)) {
-                    if ($UrlInput.Text -ne "") { $UrlInput.AppendText("`r`n") }
-                    $UrlInput.AppendText($clipText)
-                    [System.Windows.Forms.Clipboard]::Clear()
-                    $StatusLabel.Text = "Status: Link auto-grabbed from clipboard!"
-                    $StatusLabel.Foreground = "#FFF2C811"
-                }
-            }
-        } catch {}
-    }
+    $logBox = if ($global:logsWindow -and $global:logsWindow.IsLoaded) { $global:logsWindow.FindName("LogBox") } else { $null }
+    $activeCount = 0
 
-    if (Test-Path $global:tempLogFile) {
-        $lines = @(Get-Content $global:tempLogFile -ErrorAction SilentlyContinue)
-        $currentCount = $lines.Count
-        
-        if ($currentCount -gt $global:lastLogLineCount) {
-            for ($i = $global:lastLogLineCount; $i -lt $currentCount; $i++) {
-                $line = $lines[$i]
-                if (-not [string]::IsNullOrWhiteSpace($line)) {
-                    $LogBox.AppendText($line + "`r`n")
-                    $LogBox.ScrollToEnd()
-                    
-                    if ($line -match '\[download\] Destination:\s+(.+)') {
-                        $global:currentFilePath = $matches[1]
-                    } elseif ($line -match '\[Merger\] Merging formats into\s+"(.+)"') {
-                        $global:currentFilePath = $matches[1]
-                    }
-                    
-                    if ($global:progressWindow -ne $null -and $global:progressWindow.IsLoaded) {
-                        if ($line -match '\[download\] Destination:\s+(.+)') {
-                            $global:progressWindow.FindName("PTitle").Text = Split-Path $matches[1] -Leaf
+    foreach ($task in $global:tasks) {
+        if ($task.Status -eq "Downloading" -or $task.Status -eq "Connecting") {
+            $activeCount++
+            if (Test-Path $task.LogFile) {
+                try {
+                    $lines = [System.IO.File]::ReadAllLines($task.LogFile)
+                    if ($lines.Length -gt $task.LastReadIndex) {
+                        for ($i = $task.LastReadIndex; $i -lt $lines.Length; $i++) {
+                            $line = $lines[$i]
+                            if ($logBox) { $logBox.AppendText("[$($task.Engine)] $line`r`n"); $logBox.ScrollToEnd() }
+
+                            if ($task.Engine -eq "yt-dlp") {
+                                if ($line -match 'Destination:\s+(.+)') { $task.FileName = $matches[1] -replace '.*[\\/]', '' }
+                                if ($line -match '(?<percent>\d+\.\d+)%\s+of\s+[~]*(?<size>[0-9A-Za-z\.]+)\s+at\s+(?<speed>[0-9A-Za-z\.\/]+)\s+ETA\s+(?<eta>[\d:]+)') {
+                                    $task.Status = "Downloading"; $task.Progress = [double]$matches.percent; $task.Size = $matches.size
+                                    $task.ProgressText = "$($matches.percent)%"
+                                    $task.Downloaded = "$($matches.percent)% (Extracting...)"; $task.TransferRate = $matches.speed; $task.TimeLeft = $matches.eta
+                                }
+                            } else {
+                                if ($line -match '\[#\w+\s+[^/]+/(?<size>[^\(]+)\((?<percent>\d+)%\).*?DL:(?<speed>[^\s]+).*?(ETA:(?<eta>[^\]]+))?\]') {
+                                    $task.Status = "Downloading"; $task.Progress = [double]$matches.percent; $task.Size = $matches.size
+                                    $task.ProgressText = "$($matches.percent)%"
+                                    $task.Downloaded = "$($matches.percent)%" ; $task.TransferRate = $matches.speed
+                                    if ($matches.eta) { $task.TimeLeft = $matches.eta }
+                                }
+                            }
                         }
-                        
-                        if ($line -match '\[download\]\s+(?<percent>\d+\.\d+)%\s+of\s+[~]*(?<size>[0-9A-Za-z\.]+)\s+at\s+(?<speed>[0-9A-Za-z\.\/]+)\s+ETA\s+(?<eta>[\d:]+)') {
-                            $global:progressWindow.FindName("PBar").Value = [double]$matches.percent
-                            $global:progressWindow.FindName("PPercent").Text = "$($matches.percent)%"
-                            $global:progressWindow.FindName("PSize").Text = $matches.size
-                            $global:progressWindow.FindName("PSpeed").Text = "Speed: $($matches.speed)"
-                            $global:progressWindow.FindName("PEta").Text = "ETA: $($matches.eta)"
-                        }
+                        $task.LastReadIndex = $lines.Length
                     }
-                }
+                } catch {}
             }
-            $global:lastLogLineCount = $currentCount
+            if ($null -ne $task.Process -and $task.Process.HasExited) {
+                $activeCount--
+                if ($task.Process.ExitCode -eq 0 -or $task.Progress -ge 99.9) {
+                    $task.Status = "Finished"; $task.Progress = 100; $task.ProgressText = "100%"
+                    $task.TransferRate = ""; $task.TimeLeft = ""; $task.Downloaded = $task.Size
+                    $view.Refresh()
+                    if ($task.OpenOnComplete -eq $true) { try { Invoke-Item $task.SavePath } catch {} }
+                } else {
+                    if ($task.Status -notin @("Paused", "Cancelled")) { $task.Status = "Error" }
+                }
+                $task.Process = $null
+            }
         }
     }
 
-    if ($global:activeProcess -ne $null -and $global:activeProcess.HasExited) {
-        if (-not $global:isPaused) {
-            $uiTimer.Stop()
-            $global:activeProcess = $null
-            
-            if ($global:progressWindow -ne $null) {
-                $global:progressWindow.Close()
-                $global:progressWindow = $null
-            }
-
-            $StatusLabel.Text = "Status: Ready."
-            $StatusLabel.Foreground = "#FF808080"
-            $DownloadBtn.IsEnabled = $true
-            
-            $action = $PostActionSelector.Text
-            if ($action -match "Shutdown PC") { Stop-Computer -Force } 
-            elseif ($action -match "Exit Application") { $window.Close() } 
-            else { Show-CompleteDialog }
+    # Queue Manager
+    if ($activeCount -lt [int]$global:defaultConcurrent) {
+        $nextTask = $null
+        foreach ($t in $global:tasks) { if ($t.Status -eq "Queued") { $nextTask = $t; break } }
+        
+        if ($null -ne $nextTask) {
+            $nextTask.Status = "Connecting"
+            try { 
+                $nextTask.Process = [System.Diagnostics.Process]::Start($nextTask.StartInfo)
+                Start-LogReader -Process $nextTask.Process -LogFile $nextTask.LogFile
+            } catch { $nextTask.Status = "Error" }
         }
     }
 })
 
 # ---------------------------------------------------------
-# Dynamic Dialog Builders
+# Status Dialog
 # ---------------------------------------------------------
-function Show-ProgressDialog {
-    [xml]$pXaml = @"
+function Show-StatusDialog {
+    param($Task)
+    [xml]$statusXaml = @"
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-            Title="Downloading File..." Height="230" Width="500"
-            Background="#FF1E1E1E" Foreground="White" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Topmost="True">
+            Title="$($Task.FileName) - AUMYS Status" Height="380" Width="550" Background="#FFF0F0F0" WindowStartupLocation="CenterOwner" ResizeMode="CanMinimize" FontFamily="Segoe UI">
+        <Grid Margin="10">
+            <TabControl Background="White" BorderBrush="#FFCCCCCC">
+                <TabItem Header="Download status">
+                    <Grid Margin="15">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <TextBox Text="{Binding Url}" Grid.Row="0" IsReadOnly="True" BorderThickness="0" Background="Transparent" Margin="0,0,0,15" TextWrapping="Wrap"/>
+                        <Grid Grid.Row="1" Margin="0,0,0,20">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="100"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="20"/><RowDefinition Height="20"/><RowDefinition Height="20"/><RowDefinition Height="20"/><RowDefinition Height="20"/><RowDefinition Height="20"/><RowDefinition Height="20"/></Grid.RowDefinitions>
+                            <TextBlock Text="Status" Grid.Row="0" Grid.Column="0"/><TextBlock Text="{Binding Status}" Grid.Row="0" Grid.Column="1" Foreground="Blue"/>
+                            <TextBlock Text="File size" Grid.Row="1" Grid.Column="0"/><TextBlock Text="{Binding Size}" Grid.Row="1" Grid.Column="1"/>
+                            <TextBlock Text="Downloaded" Grid.Row="2" Grid.Column="0"/><TextBlock Text="{Binding Downloaded}" Grid.Row="2" Grid.Column="1"/>
+                            <TextBlock Text="Transfer rate" Grid.Row="3" Grid.Column="0"/><TextBlock Text="{Binding TransferRate}" Grid.Row="3" Grid.Column="1"/>
+                            <TextBlock Text="Time left" Grid.Row="4" Grid.Column="0"/><TextBlock Text="{Binding TimeLeft}" Grid.Row="4" Grid.Column="1"/>
+                            <TextBlock Text="Connections" Grid.Row="5" Grid.Column="0"/><TextBlock Text="16 (Multi-threaded)" Grid.Row="5" Grid.Column="1" Foreground="#FF28A745" FontWeight="SemiBold"/>
+                            <TextBlock Text="Resume capability" Grid.Row="6" Grid.Column="0"/><TextBlock Text="Yes" Grid.Row="6" Grid.Column="1"/>
+                        </Grid>
+                        <ProgressBar Grid.Row="2" Value="{Binding Progress}" Height="18" Minimum="0" Maximum="100" Margin="0,0,0,15"/>
+                        <Grid Grid.Row="3">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Name="SPauseBtn" Content="Pause" Width="80" Height="25" Margin="0,0,10,0" Background="#FFE1E1E1" BorderBrush="#FFADADAD"/>
+                                <Button Name="SCancelBtn" Content="Cancel" Width="80" Height="25" Background="#FFE1E1E1" BorderBrush="#FFADADAD"/>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </TabItem>
+                <TabItem Header="Options on completion">
+                    <StackPanel Margin="20">
+                        <TextBlock Text="Actions to perform when download finishes:" Margin="0,0,0,15" FontWeight="SemiBold"/>
+                        <CheckBox Name="SOpenFolderCheck" Content="Open folder when download is complete" IsChecked="{Binding OpenOnComplete}"/>
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
+        </Grid>
+    </Window>
+"@
+    $sReader = (New-Object System.Xml.XmlNodeReader $statusXaml)
+    $sWin = [Windows.Markup.XamlReader]::Load($sReader)
+    $sWin.Owner = $window
+    $sWin.DataContext = $Task
+
+    if ($Task.Status -in @("Paused", "Error", "Cancelled", "Queued")) { $sWin.FindName("SPauseBtn").Content = "Resume" }
+
+    $sWin.FindName("SCancelBtn").Add_Click({
+        param($sender, $e)
+        $win = [System.Windows.Window]::GetWindow($sender)
+        $ctx = $win.DataContext
+        if ($null -ne $ctx) {
+            if ($null -ne $ctx.Process) { try{ if (-not $ctx.Process.HasExited) { $ctx.Process.Kill() } }catch{} }
+            $ctx.Status = "Cancelled"; $ctx.TransferRate = "Stopped"
+        }
+        $win.Close()
+    })
+
+    $sWin.FindName("SPauseBtn").Add_Click({
+        param($sender, $e)
+        $win = [System.Windows.Window]::GetWindow($sender)
+        $ctx = $win.DataContext
+        if ($null -ne $ctx) {
+            if ($ctx.Status -in @("Paused", "Error", "Cancelled", "Queued")) {
+                $ctx.Status = "Queued"; $ctx.TransferRate = "Waiting in queue..."
+                $sender.Content = "Pause"
+            } else {
+                if ($null -ne $ctx.Process) { try { if (-not $ctx.Process.HasExited) { $ctx.Process.Kill() } } catch {} }
+                $ctx.Status = "Paused"; $ctx.TransferRate = "Stopped"
+                $sender.Content = "Resume"
+            }
+        }
+    })
+    $sWin.Show()
+}
+
+# ---------------------------------------------------------
+# Logs Window
+# ---------------------------------------------------------
+$window.FindName("LogsBtn").Add_Click({
+    if ($global:logsWindow -and $global:logsWindow.IsLoaded) { $global:logsWindow.Activate(); return }
+    [xml]$logXaml = @"
+    <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="AUMYS System Logs" Height="450" Width="700" Background="#FF09090b" WindowStartupLocation="CenterOwner" FontFamily="Consolas">
+        <TextBox Name="LogBox" IsReadOnly="True" Background="Transparent" Foreground="#FF10b981" BorderThickness="0" VerticalScrollBarVisibility="Auto" Margin="10" TextWrapping="Wrap"/>
+    </Window>
+"@
+    $global:logsWindow = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $logXaml))
+    $global:logsWindow.Owner = $window; $global:logsWindow.Show()
+})
+
+# ---------------------------------------------------------
+# Add URL Dialog & Playlist Extractor
+# ---------------------------------------------------------
+function Show-AddUrlDialog {
+    [xml]$addUrlXaml = @"
+    <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+            Title="Download File Info - AUMYS" Height="360" Width="600" Background="#FFF0F0F0" WindowStartupLocation="CenterOwner" ResizeMode="CanMinimize" FontFamily="Segoe UI">
         <Grid Margin="15">
             <StackPanel>
-                <TextBlock Text="Downloading:" FontSize="14" Foreground="#FF569CD6" Margin="0,0,0,5"/>
-                <TextBlock Name="PTitle" Text="Connecting to server..." FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Margin="0,0,0,15" Foreground="#FFFFD700"/>
-                
-                <ProgressBar Name="PBar" Height="25" Minimum="0" Maximum="100" Value="0" Margin="0,0,0,10" Background="#FF2D2D30" Foreground="#FF28A745" BorderBrush="#FF3F3F46"/>
-                
-                <Grid Margin="0,0,0,15">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Name="PPercent" Grid.Column="0" Text="0.0%" FontWeight="Bold" Foreground="#FF569CD6"/>
-                    <TextBlock Name="PSize" Grid.Column="1" Text="-- MB" HorizontalAlignment="Center" Foreground="#FFCE9178"/>
-                    <TextBlock Name="PSpeed" Grid.Column="2" Text="Speed: --" HorizontalAlignment="Right" Foreground="#FF4EC9B0"/>
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="URL" Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                    <TextBox Name="UrlInput" Grid.Column="1" Height="25" Padding="3" BorderBrush="#FFADADAD"/>
                 </Grid>
+
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Category" Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                    <ComboBox Name="CatSelector" Grid.Column="1" Height="25">
+                        <ComboBoxItem Content="Media (yt-dlp)"/>
+                        <ComboBoxItem Content="Direct File (aria2)"/>
+                    </ComboBox>
+                </Grid>
+
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <TextBlock Text="Save As" Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,10,0"/>
+                    <TextBox Name="SavePathInput" Grid.Column="1" Height="25" Padding="3" BorderBrush="#FFADADAD"/>
+                    <Button Name="BrowseSaveBtn" Content="..." Grid.Column="2" Width="30" Height="25" Margin="5,0,0,0" Background="#FFE1E1E1" BorderBrush="#FFADADAD"/>
+                </Grid>
+
+                <GroupBox Name="MediaOptionsGroup" Header="Media Options (AUMYS)" Margin="80,0,0,15" Foreground="#FF007ACC" BorderBrush="#FFCCCCCC">
+                    <Grid Margin="5">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Video Quality:" Margin="0,0,0,2"/>
+                            <ComboBox Name="PresetSelector" Height="24" Margin="0,0,10,10">
+                                <ComboBoxItem Content="TV MP4 1080p (H.264)" IsSelected="True"/>
+                                <ComboBoxItem Content="TV MP4 720p (H.264)"/>
+                                <ComboBoxItem Content="MP4 4K (Best)"/>
+                                <ComboBoxItem Content="MP3 Audio"/>
+                            </ComboBox>
+                            <CheckBox Name="SubsCheck" Content="Download Subtitles (En/Ur)"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Playlist Range:" Margin="0,0,0,2"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <TextBox Name="PlayStart" Width="30" Text="1" TextAlignment="Center"/>
+                                <TextBlock Text=" to " VerticalAlignment="Center"/>
+                                <TextBox Name="PlayEnd" Width="30" Text="0" TextAlignment="Center"/>
+                            </StackPanel>
+                            <CheckBox Name="SponsorCheck" Content="Skip Sponsor Segments"/>
+                        </StackPanel>
+                    </Grid>
+                </GroupBox>
+
                 <Grid>
-                    <TextBlock Name="PEta" Text="ETA: --:--" HorizontalAlignment="Left" VerticalAlignment="Center" Foreground="#FF808080"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Name="PPauseBtn" Content="⏸ Pause" Width="80" Background="#FFF2C811" Foreground="Black" BorderThickness="0" Padding="5" Cursor="Hand" Margin="0,0,10,0"/>
-                        <Button Name="PCancel" Content="⏹ Cancel" Width="80" Background="#FFD13438" Foreground="White" BorderThickness="0" Padding="5" Cursor="Hand"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Name="LaterBtn" Content="Download Later" Width="110" Height="28" Margin="0,0,15,0" Background="#FFE1E1E1" BorderBrush="#FFADADAD"/>
+                        <Button Name="StartBtn" Content="Start Download" Width="110" Height="28" Margin="0,0,15,0" Background="#FFE1E1E1" BorderBrush="#FF007ACC" BorderThickness="2" FontWeight="Bold"/>
+                        <Button Name="CancelBtn" Content="Cancel" Width="90" Height="28" Background="#FFE1E1E1" BorderBrush="#FFADADAD"/>
                     </StackPanel>
                 </Grid>
             </StackPanel>
         </Grid>
     </Window>
 "@
-    $pReader = (New-Object System.Xml.XmlNodeReader $pXaml)
-    $global:progressWindow = [Windows.Markup.XamlReader]::Load($pReader)
-    $global:progressWindow.Owner = $window
+    $addWin = [Windows.Markup.XamlReader]::Load((New-Object System.Xml.XmlNodeReader $addUrlXaml))
+    $addWin.Owner = $window
+    $addWin.FindName("SavePathInput").Text = $global:defaultSavePath
 
-    $global:progressWindow.FindName("PPauseBtn").Add_Click({
-        $btn = $global:progressWindow.FindName("PPauseBtn")
-        if ($global:isPaused) {
-            $global:isPaused = $false
-            $btn.Content = "⏸ Pause"
-            $btn.Background = "#FFF2C811"
-            $btn.Foreground = "Black"
-            
-            $global:activeProcess = [System.Diagnostics.Process]::Start($global:lastProcessInfo)
-            
-            $runspaceCode = {
-                param($process, $logFile)
-                while (-not $process.HasExited) {
-                    $line = $process.StandardOutput.ReadLine()
-                    if ($line) { Add-Content -Path $logFile -Value $line }
-                }
+    try {
+        if ([System.Windows.Forms.Clipboard]::ContainsText()) {
+            $clipText = [System.Windows.Forms.Clipboard]::GetText()
+            if ($clipText -and $clipText.Trim() -match "^https?://") { 
+                $addWin.FindName("UrlInput").Text = $clipText.Trim() 
+                if ($clipText -match "(youtube|facebook|twitter|tiktok)") { $addWin.FindName("CatSelector").SelectedIndex = 0; $addWin.FindName("MediaOptionsGroup").Visibility = "Visible" } 
+                else { $addWin.FindName("CatSelector").SelectedIndex = 1; $addWin.FindName("MediaOptionsGroup").Visibility = "Collapsed" }
             }
-            $ps = [PowerShell]::Create().AddScript($runspaceCode).AddArgument($global:activeProcess).AddArgument($global:tempLogFile)
-            $ps.BeginInvoke() | Out-Null
-        } else {
-            $global:isPaused = $true
-            $btn.Content = "▶ Resume"
-            $btn.Background = "#FF28A745"
-            $btn.Foreground = "White"
-            if ($global:activeProcess -ne $null -and -not $global:activeProcess.HasExited) { $global:activeProcess.Kill() }
         }
+    } catch {}
+
+    $addWin.FindName("UrlInput").Add_TextChanged({
+        $t = $addWin.FindName("UrlInput").Text
+        if ($t -match "(youtube|facebook|twitter|tiktok)") { $addWin.FindName("CatSelector").SelectedIndex = 0; $addWin.FindName("MediaOptionsGroup").Visibility = "Visible" } 
+        else { $addWin.FindName("CatSelector").SelectedIndex = 1; $addWin.FindName("MediaOptionsGroup").Visibility = "Collapsed" }
     })
 
-    $global:progressWindow.FindName("PCancel").Add_Click({
-        if ($global:activeProcess -ne $null -and -not $global:activeProcess.HasExited) { $global:activeProcess.Kill() }
-        $global:progressWindow.Close()
-        $global:activeProcess = $null
-        $StatusLabel.Text = "Status: Cancelled by user."
-        $DownloadBtn.IsEnabled = $true
+    $addWin.FindName("BrowseSaveBtn").Add_Click({
+        $d=New-Object System.Windows.Forms.FolderBrowserDialog
+        if($d.ShowDialog() -eq "OK"){$addWin.FindName("SavePathInput").Text=$d.SelectedPath}
     })
+    $addWin.FindName("CancelBtn").Add_Click({ $addWin.Close() })
 
-    $global:progressWindow.Show()
+    function Create-Task($StartImmediately) {
+        $url = $addWin.FindName("UrlInput").Text.Trim()
+        if ($url -eq "") { return }
+        $isMedia = ($addWin.FindName("CatSelector").SelectedIndex -eq 0)
+        $parsedList = @()
+        
+        if ($isMedia) {
+            $addWin.Cursor = [System.Windows.Input.Cursors]::Wait
+            $window.FindName("StatusBarText").Text = "Extracting Playlist Links..."
+            [System.Windows.Forms.Application]::DoEvents()
+
+            $pInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $pInfo.FileName = Join-Path (Split-Path -Parent ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)) "yt-dlp.exe"
+            $pArgs = @("--flat-playlist", "--print", "`"%(title)s||%(url)s`"")
+            $pS = $addWin.FindName("PlayStart").Text; $pE = $addWin.FindName("PlayEnd").Text
+            if ($pS -match "^\d+$" -and [int]$pS -gt 0) { $pArgs += "--playlist-start", $pS }
+            if ($pE -match "^\d+$" -and [int]$pE -gt 0) { $pArgs += "--playlist-end", $pE }
+            $pArgs += "`"$url`""
+            
+            $pInfo.Arguments = $pArgs -join " "
+            $pInfo.RedirectStandardOutput = $true; $pInfo.UseShellExecute = $false; $pInfo.CreateNoWindow = $true
+            
+            try {
+                $pProc = [System.Diagnostics.Process]::Start($pInfo)
+                $pOut = $pProc.StandardOutput.ReadToEnd()
+                $pProc.WaitForExit()
+                foreach ($l in ($pOut -split "`n" | Where-Object { $_.Trim() -ne "" })) {
+                    $parts = $l -split "\|\|"
+                    $vTitle = $parts[0].Trim()
+                    $vUrl = if ($parts.Count -gt 1 -and $parts[1].Trim() -ne "") { $parts[1].Trim() } else { $url }
+                    if ($vUrl -notmatch "^http") { $vUrl = $url }
+                    $parsedList += @{ Title = $vTitle; Url = $vUrl }
+                }
+            } catch {}
+            $addWin.Cursor = [System.Windows.Input.Cursors]::Arrow
+        }
+        if ($parsedList.Count -eq 0) { $parsedList += @{ Title = "Connecting..."; Url = $url } }
+
+        foreach ($item in $parsedList) {
+            $id = [guid]::NewGuid().ToString("N")
+            $log = Join-Path $env:TEMP "ytpl_$id.log"
+            
+            $task = New-Object DownloadTask
+            $task.Id = $id; $task.Url = $item.Url; $task.FileName = $item.Title; $task.Size = "--"; $task.Progress = 0
+            $task.ProgressText = "0%"; $task.TransferRate = "Queued"; $task.TimeLeft = "--:--"; $task.LogFile = $log; $task.LastReadIndex = 0
+            $task.SavePath = $addWin.FindName('SavePathInput').Text
+            $task.OpenOnComplete = $false
+            $task.Status = if ($StartImmediately) { "Queued" } else { "Paused" }
+
+            $psi = New-Object System.Diagnostics.ProcessStartInfo
+            $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
+
+            if ($isMedia) {
+                $task.Engine = "yt-dlp"
+                $psi.FileName = Join-Path (Split-Path -Parent ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)) "yt-dlp.exe"
+                $args = @("--newline", "--ignore-errors", "-o", "`"$($task.SavePath)\%(title)s.%(ext)s`"")
+                
+                if ($global:defaultSpeedLimit -ne "Unlimited") { $args += "--limit-rate", $global:defaultSpeedLimit }
+
+                $preset = $addWin.FindName("PresetSelector").Text
+                if ($preset -match "MP3") { $args += "-x", "--audio-format", "mp3" }
+                elseif ($preset -match "TV MP4 1080p") { $args += "-f", "bestvideo[vcodec^=avc1][height<=1080]+bestaudio/best", "--merge-output-format", "mp4" }
+                elseif ($preset -match "TV MP4 720p") { $args += "-f", "bestvideo[vcodec^=avc1][height<=720]+bestaudio/best", "--merge-output-format", "mp4" }
+                elseif ($preset -match "4K") { $args += "-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4" }
+                
+                if ($addWin.FindName("SubsCheck").IsChecked) { $args += "--write-subs", "--write-auto-subs", "--sub-langs", "en,ur", "--embed-subs" }
+                if ($addWin.FindName("SponsorCheck").IsChecked) { $args += "--sponsorblock-remove", "sponsor" }
+
+                $args += "`"$($item.Url)`""
+                $psi.Arguments = $args -join " "
+            } else {
+                $task.Engine = "aria2c"
+                $psi.FileName = Join-Path (Split-Path -Parent ([System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)) "aria2c.exe"
+                $ariaArgs = "--dir=`"$($task.SavePath)`" -x16 -s16 --continue=true"
+                if ($global:defaultSpeedLimit -ne "Unlimited") { $ariaArgs += " --max-download-limit=$($global:defaultSpeedLimit)" }
+                $ariaArgs += " `"$($item.Url)`""
+                $psi.Arguments = $ariaArgs
+            }
+            $task.StartInfo = $psi
+            $global:tasks.Add($task)
+        }
+        $view.Refresh()
+        $addWin.Close()
+    }
+
+    $addWin.FindName("StartBtn").Add_Click({ Create-Task $true })
+    $addWin.FindName("LaterBtn").Add_Click({ Create-Task $false })
+    $addWin.ShowDialog() | Out-Null
 }
 
-function Show-CompleteDialog {
-    [xml]$cXaml = @"
-    <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-            Title="Download Complete" Height="200" Width="450"
-            Background="#FF1E1E1E" Foreground="White" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" Topmost="True">
-        <Grid Margin="20">
-            <StackPanel>
-                <TextBlock Text="✅ Download Completed Successfully!" FontSize="16" FontWeight="Bold" Foreground="#FF28A745" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-                <TextBlock Text="File has been saved to your directory." Foreground="#FFCCCCCC" HorizontalAlignment="Center" Margin="0,0,0,20"/>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                    <Button Name="CPlayBtn" Content="▶ Play Video" Width="100" Background="#FF007ACC" Foreground="White" BorderThickness="0" Padding="8,5" Margin="0,0,10,0"/>
-                    <Button Name="CFolderBtn" Content="📂 Open Folder" Width="110" Background="#FF569CD6" Foreground="White" BorderThickness="0" Padding="8,5" Margin="0,0,10,0"/>
-                    <Button Name="CCloseBtn" Content="Close" Width="80" Background="#FF4F4F4F" Foreground="White" BorderThickness="0" Padding="8,5"/>
-                </StackPanel>
-            </StackPanel>
-        </Grid>
-    </Window>
-"@
-    $cReader = (New-Object System.Xml.XmlNodeReader $cXaml)
-    $cWindow = [Windows.Markup.XamlReader]::Load($cReader)
-    $cWindow.Owner = $window
+$window.FindName("AddUrlBtn").Add_Click({ Show-AddUrlDialog })
+$window.FindName("MenuAddUrl").Add_Click({ Show-AddUrlDialog })
 
-    $cWindow.FindName("CPlayBtn").Add_Click({
-        if (Test-Path $global:currentFilePath) { Invoke-Item $global:currentFilePath }
-        $cWindow.Close()
-    })
-    $cWindow.FindName("CFolderBtn").Add_Click({
-        if (Test-Path $SaveFolderInput.Text) { Invoke-Item $SaveFolderInput.Text }
-        $cWindow.Close()
-    })
-    $cWindow.FindName("CCloseBtn").Add_Click({ $cWindow.Close() })
-
-    $cWindow.ShowDialog() | Out-Null
+# ---------------------------------------------------------
+# Fully Functional Top Menus & Context Menu Actions
+# ---------------------------------------------------------
+function Trigger-Resume {
+    $sel = $window.FindName("MainList").SelectedItem
+    if ($null -ne $sel -and $sel.Status -in @("Paused", "Error", "Cancelled")) {
+        $sel.Status = "Queued"; $sel.TransferRate = "Waiting in queue..."
+    }
+}
+function Trigger-Stop {
+    $sel = $window.FindName("MainList").SelectedItem
+    if ($null -ne $sel -and $sel.Status -in @("Downloading", "Connecting", "Queued")) {
+        if ($null -ne $sel.Process) { try { if (-not $sel.Process.HasExited) { $sel.Process.Kill() } } catch {} }
+        $sel.Status = "Paused"; $sel.TransferRate = "Stopped"
+    }
+}
+function Trigger-Delete {
+    $sel = $window.FindName("MainList").SelectedItem
+    if ($null -ne $sel) {
+        if ($null -ne $sel.Process) { try { if (-not $sel.Process.HasExited) { $sel.Process.Kill() } } catch {} }
+        $global:tasks.Remove($sel)
+    }
 }
 
-# ---------------------------------------------------------
-# Basic Button Events & Setup
-# ---------------------------------------------------------
+$window.FindName("ResumeBtn").Add_Click({ Trigger-Resume })
+$window.FindName("CtxResumeBtn").Add_Click({ Trigger-Resume })
+$window.FindName("MenuResume").Add_Click({ Trigger-Resume })
+
+$window.FindName("StopBtn").Add_Click({ Trigger-Stop })
+$window.FindName("CtxStopBtn").Add_Click({ Trigger-Stop })
+$window.FindName("MenuStop").Add_Click({ Trigger-Stop })
+
+$window.FindName("DeleteBtn").Add_Click({ Trigger-Delete })
+$window.FindName("CtxDeleteBtn").Add_Click({ Trigger-Delete })
+$window.FindName("MenuDelete").Add_Click({ Trigger-Delete })
+
+$window.FindName("CtxOpenFolderBtn").Add_Click({
+    $sel = $window.FindName("MainList").SelectedItem
+    if ($null -ne $sel -and $null -ne $sel.SavePath) { try { Invoke-Item $sel.SavePath } catch {} }
+})
+$window.FindName("CtxStatusBtn").Add_Click({
+    $sel = $window.FindName("MainList").SelectedItem
+    if ($null -ne $sel) { Show-StatusDialog -Task $sel }
+})
+$window.FindName("MenuDeleteCompleted").Add_Click({
+    $completed = @($global:tasks | Where-Object { $_.Status -eq "Finished" })
+    foreach ($c in $completed) { $global:tasks.Remove($c) }
+})
+$window.FindName("MenuPauseAll").Add_Click({
+    foreach ($t in $global:tasks) {
+        if ($t.Status -in @("Downloading", "Connecting", "Queued")) {
+            if ($null -ne $t.Process) { try { if (-not $t.Process.HasExited) { $t.Process.Kill() } } catch {} }
+            $t.Status = "Paused"; $t.TransferRate = "Stopped"
+        }
+    }
+})
+$window.FindName("MenuExit").Add_Click({ $window.Close() })
+
 $window.Add_Loaded({
+    $window.FindName("MainList").Add_MouseDoubleClick({
+        $sel = $window.FindName("MainList").SelectedItem
+        if ($null -ne $sel) { Show-StatusDialog -Task $sel }
+    })
     $uiTimer.Start()
 })
 
-$BrowseBtn.Add_Click({
-    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $SaveFolderInput.Text = $dialog.SelectedPath }
-})
-
-$OpenFolderBtn.Add_Click({
-    if (Test-Path $SaveFolderInput.Text) { Invoke-Item $SaveFolderInput.Text }
-})
-
-# ---------------------------------------------------------
-# Core Download Event (With Pro Options Added)
-# ---------------------------------------------------------
-$DownloadBtn.Add_Click({
-    $url = $UrlInput.Text.Trim()
-    if ([string]::IsNullOrEmpty($url)) {
-        [System.Windows.MessageBox]::Show("Please enter a valid URL.", "Error")
-        return
-    }
-
-    $currentExePath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-    $currentDir = Split-Path -Parent $currentExePath
-    $ytdlpPath = Join-Path $currentDir "yt-dlp.exe"
-    
-    if (-not (Test-Path $ytdlpPath)) {
-        [System.Windows.MessageBox]::Show("yt-dlp.exe is missing. Please restart the app.", "Error")
-        return
-    }
-
-    $DownloadBtn.IsEnabled = $false
-    $StatusLabel.Text = "Status: Downloading..."
-    $StatusLabel.Foreground = "#FF28A745"
-    
-    $global:lastLogLineCount = 0
-    $global:currentFilePath = ""
-    $global:isPaused = $false
-    New-Item -ItemType File -Path $global:tempLogFile -Force | Out-Null
-    
-    Show-ProgressDialog
-    
-    # Base arguments
-    $args = @("--newline", "--no-warnings", "--continue")
-    
-    # Naming Format Logic
-    $nameFormat = "%(title)s.%(ext)s"
-    if ($NamingSelector.Text -match "Channel Name") { $nameFormat = "%(uploader)s - %(title)s.%(ext)s" }
-    elseif ($NamingSelector.Text -match "Upload Date") { $nameFormat = "%(upload_date)s - %(title)s.%(ext)s" }
-    $args += "-o", "`"$($SaveFolderInput.Text)\$nameFormat`""
-    
-    # Subtitles Logic
-    if ($SubtitlesCheck.IsChecked) {
-        $args += "--write-subs", "--write-auto-subs", "--sub-langs", "en,ur", "--embed-subs"
-    }
-
-    # Thumbnail Logic
-    if ($ThumbnailCheck.IsChecked) {
-        $args += "--write-thumbnail", "--convert-thumbnails", "jpg"
-    }
-
-    # Browser Cookies Logic
-    if ($CookiesSelector.Text -ne "None (Default)") {
-        $args += "--cookies-from-browser", $CookiesSelector.Text
-    }
-    
-    # Playlist & Limits
-    $pStart = $window.FindName("PlaylistStart").Text.Trim()
-    $pEnd = $window.FindName("PlaylistEnd").Text.Trim()
-    if ($pStart -match "^\d+$" -and [int]$pStart -gt 0) { $args += "--playlist-start", $pStart }
-    if ($pEnd -match "^\d+$" -and [int]$pEnd -gt 0) { $args += "--playlist-end", $pEnd }
-    if ($SpeedLimitSelector.Text -ne "Unlimited") { $args += "--limit-rate", $SpeedLimitSelector.Text }
-    if ($ThreadsSelector.Text -match "16 Threads") { $args += "--concurrent-fragments", "16" }
-
-    # Presets
-    $preset = $PresetSelector.Text
-    if ($preset -match "MP3") {
-        $args += "-x", "--audio-format", "mp3"
-    } elseif ($preset -match "TV MP4" -or $preset -match "MP4") {
-        if ($preset -match "1080p") { $args += "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" }
-        elseif ($preset -match "720p") { $args += "-f", "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" }
-        elseif ($preset -match "480p") { $args += "-f", "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" }
-        $args += "--merge-output-format", "mp4"
-    } elseif ($preset -match "MKV") {
-        $args += "--merge-output-format", "mkv"
-    } elseif ($preset -match "WebM") {
-        $args += "-f", "bestvideo[ext=webm]+bestaudio[ext=webm]/best"
-    }
-
-    $args += $url
-
-    $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $processInfo.FileName = $ytdlpPath
-    $processInfo.Arguments = $args -join " "
-    $processInfo.RedirectStandardOutput = $true
-    $processInfo.RedirectStandardError = $true
-    $processInfo.UseShellExecute = $false
-    $processInfo.CreateNoWindow = $true
-
-    $global:lastProcessInfo = $processInfo
-
-    try {
-        $global:activeProcess = [System.Diagnostics.Process]::Start($processInfo)
-        
-        $runspaceCode = {
-            param($process, $logFile)
-            while (-not $process.HasExited) {
-                $line = $process.StandardOutput.ReadLine()
-                if ($line) { Add-Content -Path $logFile -Value $line }
-            }
-        }
-        $ps = [PowerShell]::Create().AddScript($runspaceCode).AddArgument($global:activeProcess).AddArgument($global:tempLogFile)
-        $ps.BeginInvoke() | Out-Null
-    }
-    catch {
-        $StatusLabel.Text = "Status: Error starting engine."
-        $StatusLabel.Foreground = "#FFD13438"
-        $DownloadBtn.IsEnabled = $true
-        if ($global:progressWindow -ne $null) { $global:progressWindow.Close() }
-    }
-})
-
+$window.Add_Closing({ foreach($t in $global:tasks){ if($null -ne $t.Process){ try{ if(-not $t.Process.HasExited){ $t.Process.Kill() } }catch{} } } })
 $window.ShowDialog() | Out-Null
